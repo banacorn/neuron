@@ -15,3 +15,5 @@ vignettes/*.pdf
 # generated graphics
 Rplots.pdf
 animation.gif
+
+*.atom-build.json
