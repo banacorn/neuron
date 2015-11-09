@@ -343,7 +343,7 @@ drawDecisionBoundaryQ(weights[, 1], xlim = c(-20, 20), ylim = c(-20, 20), length
 drawDecisionBoundaryQ(weights[, 2], xlim = c(-20, 20), ylim = c(-20, 20), length = 100)
 drawDecisionBoundaryQ(weights[, 3], xlim = c(-20, 20), ylim = c(-20, 20), length = 100)
 drawDecisionBoundaryQ(weights[, 4], xlim = c(-20, 20), ylim = c(-20, 20), length = 100)
-title("(b) quadratic multiclass perceptron with hardlimiter activation function")
+title("(b) quadratic multiclass perceptron with sigmoid activation function")
 
 drawErrors(errors)
 title("error / iteration")
