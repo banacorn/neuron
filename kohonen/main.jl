@@ -101,7 +101,6 @@ function drawDiagonal(nodes)
 end
 
 function plotMap(m :: Map{Linear})
-    # @show m.nodes[1,:]
     points = layer(x = m.nodes[1,:], y = m.nodes[2,:], Geom.point)
     lines = layer(x = m.nodes[1,:], y = m.nodes[2,:], Geom.path,
         Theme(default_color = colorant"lightgrey", line_width = 0.5px))
@@ -115,12 +114,30 @@ function plotMap(m :: Map{Manhattan})
     return plot([points; orthoganal]..., Theme(background_color = colorant"white"))
 end
 
-function plotMap{Chebyshev}(m :: Map{Chebyshev})
+function plotMap(m :: Map{Chebyshev})
     nodes = reshape(m.nodes, (2, m.dimension[1], m.dimension[2]))
     points = layer(x=nodes[1,:,:], y=nodes[2,:,:], Geom.point)
     orthoganal = drawOrthoganal(nodes)
     diagonal = drawDiagonal(nodes)
     return plot([points; orthoganal; diagonal]..., Theme(background_color = colorant"white"))
+end
+
+################################################################################
+##  Metrics
+################################################################################
+
+function metric(m :: Map{Linear}, i, j)
+    return j - i
+end
+
+function metric(m :: Map{Manhattan}, i, j)
+    width = m.dimension[2]
+    return abs(div(i,width) - div(j,width)) + abs(i%width - j%width)
+end
+
+function metric(m :: Map{Chebyshev}, i, j)
+    width = m.dimension[2]
+    return max(abs(div(i,width) - div(j,width)), abs(i%width - j%width))
 end
 
 ################################################################################
@@ -174,5 +191,5 @@ m = Map{Manhattan}(rand(2, 10 * 10), (10, 10))
 c = Map{Chebyshev}(rand(2, 10 * 10), (10, 10))
 
 draw(PNG("som.png", 600px, 600px), plotMap(l))
-
+@show metric(c, 5, 21)
 end
