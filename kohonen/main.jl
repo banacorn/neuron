@@ -16,22 +16,6 @@ typealias Class Matrix{Value}
 
 
 
-distanceSq = (w, v) -> ((w - v)' * (w - v))[1]
-
-function findBMU(net, v)
-    leastDist = distanceSq(net[:,1,1], v)
-    leastNode = (1, 1)
-    for i in eachindex(net[1,:,1])
-        for j in eachindex(net[1,1,:])
-            d = distanceSq(net[:,i,j], v)
-            if d < leastDist
-                leastDist = d
-                leastNode = (i, j)
-            end
-        end
-    end
-    return leastNode
-end
 
 ################################################################################
 ##  Datatypes
@@ -74,8 +58,8 @@ function drawDiagonal(nodes)
     layers = []
 
     # diagnal
-    width = size(nodes)[2]
-    height = size(nodes)[1]
+    height = size(nodes)[2]
+    width = size(nodes)[3]
 
     for h in 2:(height + width - 2)
         stripe = [ (h - w + 1, w) for w in 1:width ]
@@ -96,7 +80,6 @@ function drawDiagonal(nodes)
             Theme(default_color = colorant"lightgrey", line_width = 0.5px))
         push!(layers, line)
     end
-
     return layers
 end
 
@@ -140,56 +123,78 @@ function metric(m :: Map{Chebyshev}, i, j)
     return max(abs(div(i,width) - div(j,width)), abs(i%width - j%width))
 end
 
+
 ################################################################################
-##  Functions
+##  Best Matching Unit
+################################################################################
+
+distanceSq = (w, v) -> ((w - v)' * (w - v))[1]
+
+function findBMU(m, v)
+    leastDist = distanceSq(m.nodes[:,1,1], v)
+    leastNode = 1
+    for i in eachindex(m.nodes[1,:])
+        dist = distanceSq(m.nodes[:,i], v)
+        if dist < leastDist
+            leastDist = dist
+            leastNode = i
+        end
+    end
+    return leastNode
+end
+
+################################################################################
+##  Update the Map
 ################################################################################
 
 # exponential decay
 sigma = (t) -> exp(-t)
 
-distSqDecay = (distSq, t) -> exp(- distSq / (2 * sigma(t) * sigma(t)))
+radius(m::Map{Linear}) = div(m.dimension[1], 2)
+radius(m::Map{Manhattan}) = div(max(m.dimension[1], m.dimension[2]), 2)
+radius(m::Map{Chebyshev}) = div(max(m.dimension[1], m.dimension[2]), 2)
 
-function adjustNet(net, v, time)
-    BMU = findBMU(net, v)
-    # timeConstant = 10
+# Manhattan
+R = 3000
+G = 1000
 
-    # netRadius = size(net)[3] / 2
-    # influRadius = netRadius * sigma(time)
-    # # influRadius = netRadius * distSqDecay(dist, time)
-    # # @printf "influence radius: %f\n" influRadius
-    # for i in eachindex(net[1,:,1])
-    #     for j in eachindex(net[1,1,:])
-    #         node = net[:,i,j]
-    #         nodeBMUDistSq = distanceSq(collect(BMU), [i, j])
-    #         # @printf "distance from BMU (%d, %d) : %d\n" BMU[1] BMU[2] distanceSq(collect(BMU), [i, j])
-    #         if nodeBMUDistSq <= influRadius * influRadius
-    #             # @printf "(%d, %d)\t| [%f, %f] => " i j node[1] node[2]
-    #             net[:,i,j] = node + sigma(time) * distSqDecay(nodeBMUDistSq, time) * (v - node)
-    #             # @printf "(%d, %d)\t| [%f, %f] + %f * %f * [%f, %f] = [%f, %f]\n" i j  node[1] node[2] sigma(time) distSqDecay(nodeBMUDistSq, time) (v - node)[1] (v - node)[2] net[:,i,j][1] net[:,i,j][2]
-    #             # node[1] node[2] sigma(time) diff[1] diff[2]
-    #             # @printf "[%f, %f] \n" net[:,i,j][1] net[:,i,j][2]
-    #         end
-    #     end
-    # end
-    # @show BMU
-    return net
+# # Chebyshev
+# R = 3000
+# G = 1000
+
+# # Linear
+# R = 1000
+# G = 10000
+
+function update(m, vector, time)
+    nodes = m.nodes
+    bmu = findBMU(m, vector)
+    # decreasing influence radius
+    influenceRadius = radius(m) * sigma(time/R)
+
+    if influenceRadius >= 1
+        for i in eachindex(nodes[1,:])
+            dist = metric(m, bmu, i)
+            if dist <= influenceRadius
+                gain = sigma(time/G) * sigma(dist/G)
+                nodes[:,i] = nodes[:,i] + gain * (vector - nodes[:,i])
+                # println("$time\traduis: $influenceRadius\tgain: $gain")
+            end
+        end
+    else    # adjust BMU only
+        # println("$time\tsigma: $(sigma(time/G))")
+        nodes[:,bmu] = nodes[:,bmu] + sigma(time/G) * (vector - nodes[:,bmu])
+    end
 end
-# the weights of the net
-# net = rand(2, 10, 10) * 10
-#
-# for t in 0:0.01:10
-#     # input = rand(MvNormal([5.0, 5.0], [1.0 0.0; 0.0 1.0]))
-#     input = [rand() * 10, rand() * 10]
-#     net = adjustNet(net, input, t)
-# end
-
-# netPlot = plotNet(net)
-# draw(PNG("som.png", 600px, 600px), netPlot)
 
 l = Map{Linear}(rand(2, 10 * 10), (100,))
 m = Map{Manhattan}(rand(2, 10 * 10), (10, 10))
 c = Map{Chebyshev}(rand(2, 10 * 10), (10, 10))
 
-draw(PNG("som.png", 600px, 600px), plotMap(l))
-@show metric(c, 5, 21)
+for time in 0:10000
+    input = rand(2)
+    update(m, input, time)
+end
+draw(PNG("som.png", 600px, 600px), plotMap(m))
+
 end
