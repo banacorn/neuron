@@ -60,10 +60,10 @@ function drawDiagonal(nodes)
     # diagnal
     height = size(nodes)[2]
     width = size(nodes)[3]
-
     for h in 2:(height + width - 2)
         stripe = [ (h - w + 1, w) for w in 1:width ]
         stripe = filter((p) -> p[1] > 0 && p[1] <= height, stripe)
+        # @show stripe
         xs = map((p) -> nodes[1,p[1],p[2]], stripe)
         ys = map((p) -> nodes[2,p[1],p[2]], stripe)
         line = layer(x = xs, y = ys, Geom.path,
@@ -71,9 +71,10 @@ function drawDiagonal(nodes)
         push!(layers, line)
     end
 
-    for h in (1 - width):(height - width + 1)
+    for h in (1 - width):(height - 3)
         stripe = [ (h + w + 1, w) for w in 1:width ]
         stripe = filter((p) -> p[1] > 0 && p[1] <= height, stripe)
+        # @show stripe
         xs = map((p) -> nodes[1,p[1],p[2]], stripe)
         ys = map((p) -> nodes[2,p[1],p[2]], stripe)
         line = layer(x = xs, y = ys, Geom.path,
@@ -83,26 +84,40 @@ function drawDiagonal(nodes)
     return layers
 end
 
-function plotMap(m :: Map{Linear})
+function plotMap(m :: Map{Linear}, n = 10000)
     points = layer(x = m.nodes[1,:], y = m.nodes[2,:], Geom.point)
     lines = layer(x = m.nodes[1,:], y = m.nodes[2,:], Geom.path,
         Theme(default_color = colorant"lightgrey", line_width = 0.5px))
-    return plot([points; lines]..., Theme(background_color = colorant"white"))
+    return plot([points; lines]...,
+        Theme(background_color = colorant"white"),
+        Coord.cartesian(fixed = true),
+        Scale.x_continuous(minvalue = 0, maxvalue = 1),
+        Scale.y_continuous(minvalue = 0, maxvalue = 1),
+        Guide.title("n = $n"))
+        # Guide.title("Self-organizing map, $(div(length(m.nodes),2)) clusters\nEuclidean distance (2 neighbors)\n$n data points, uniformly distributed"))
 end
 
-function plotMap(m :: Map{Manhattan})
+function plotMap(m :: Map{Manhattan}, n = 10000)
     nodes = reshape(m.nodes, (2, m.dimension[1], m.dimension[2]))
     points = layer(x = nodes[1,:,:], y = nodes[2,:,:], Geom.point)
     orthoganal = drawOrthoganal(nodes)
-    return plot([points; orthoganal]..., Theme(background_color = colorant"white"))
+    return plot([points; orthoganal]...,
+        Theme(background_color = colorant"white"),
+        Coord.cartesian(fixed = true),
+        Guide.title("n = $n"))
+        # Guide.title("Self-organizing map, $(div(length(m.nodes),2)) clusters\nManhattan distance (4 neighbors)\n$n data points, uniformly distributed"))
 end
 
-function plotMap(m :: Map{Chebyshev})
+function plotMap(m :: Map{Chebyshev}, n = 10000)
     nodes = reshape(m.nodes, (2, m.dimension[1], m.dimension[2]))
     points = layer(x=nodes[1,:,:], y=nodes[2,:,:], Geom.point)
     orthoganal = drawOrthoganal(nodes)
     diagonal = drawDiagonal(nodes)
-    return plot([points; orthoganal; diagonal]..., Theme(background_color = colorant"white"))
+    return plot([points; orthoganal; diagonal]...,
+        Theme(background_color = colorant"white"),
+        Coord.cartesian(fixed = true),
+        Guide.title("n = $n"))
+        # Guide.title("Self-organizing map, $(div(length(m.nodes),2)) clusters\nChebyshev distance (8 neighbors)\n$n data points, uniformly distributed"))
 end
 
 ################################################################################
@@ -153,20 +168,20 @@ sigma = (t) -> exp(-t)
 radius(m::Map{Linear}) = div(m.dimension[1], 2)
 radius(m::Map{Manhattan}) = div(max(m.dimension[1], m.dimension[2]), 2)
 radius(m::Map{Chebyshev}) = div(max(m.dimension[1], m.dimension[2]), 2)
-
-# Manhattan
-R = 3000
-G = 1000
-
-# # Chebyshev
+#
+# # Manhattan
 # R = 3000
 # G = 1000
+#
+# # # Chebyshev
+# # R = 3000
+# # G = 1000
+#
+# # # Linear
+# # R = 1000
+# # G = 10000
 
-# # Linear
-# R = 1000
-# G = 10000
-
-function update(m, vector, time)
+function update(m, vector, time, R = 3000, G = 1000)
     nodes = m.nodes
     bmu = findBMU(m, vector)
     # decreasing influence radius
@@ -187,14 +202,32 @@ function update(m, vector, time)
     end
 end
 
-l = Map{Linear}(rand(2, 10 * 10), (100,))
-m = Map{Manhattan}(rand(2, 10 * 10), (10, 10))
-c = Map{Chebyshev}(rand(2, 10 * 10), (10, 10))
-
-for time in 0:10000
-    input = rand(2)
-    update(m, input, time)
+function trainAndPlot(timestamp, m, R, G)
+    stack = []
+    current = 0
+    for t in timestamp
+        iterations = t - current
+        current = t
+        @show 1:iterations
+        for i in 1:iterations
+            update(m, rand(2), i, R, G)
+        end
+        push!(stack, plotMap(m, t))
+    end
+    return stack
 end
-draw(PNG("som.png", 600px, 600px), plotMap(m))
+
+
+l = Map{Linear}(rand(2, 10 * 10), (100,))
+lStack = trainAndPlot([0, 25, 100, 500, 1000, 5000, 10000], l, 1000, 10000)
+draw(PNG("linear.png", 1800px, 1200px), vstack(hstack(lStack[1:3]...), hstack(lStack[4:6]...)))
+
+m = Map{Manhattan}(rand(2, 10 * 10), (10, 10))
+mStack = trainAndPlot([0, 25, 100, 500, 1000, 5000, 10000], m, 3000, 1000)
+draw(PNG("manhattan.png", 1800px, 1200px), vstack(hstack(mStack[1:3]...), hstack(mStack[4:6]...)))
+
+c = Map{Chebyshev}(rand(2, 10 * 10), (10, 10))
+cStack = trainAndPlot([0, 25, 100, 500, 1000, 5000, 10000], c, 3000, 1000)
+draw(PNG("chebyshev.png", 1800px, 1200px), vstack(hstack(cStack[1:3]...), hstack(cStack[4:6]...)))
 
 end
