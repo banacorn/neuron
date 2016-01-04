@@ -6,16 +6,6 @@ using RDatasets
 
 typealias Value Float64
 typealias Class Matrix{Value}
-# # these are the data points we are going to cluster
-# mvr0 = rand(MvNormal([0.0, 0.0], [1.0 0.0; 0.0 1.0]), 250)'
-# mvr1 = rand(MvNormal([5.0, 0.0], [1.0 0.0; 0.0 4.0]), 250)'
-# mvr2 = rand(MvNormal([5.0, 5.0], [4.0 0.0; 0.0 1.0]), 250)'
-# mvr3 = rand(MvNormal([0.0, 5.0], [1.0 0.0; 0.0 1.0]), 250)'
-# inputs = [mvr0; mvr1; mvr2; mvr3]
-
-
-
-
 
 ################################################################################
 ##  Datatypes
@@ -99,8 +89,8 @@ function plotMap(m :: Map{Linear}, n = 10000, input = [])
         Scale.x_continuous(minvalue = 0, maxvalue = 1),
         Scale.y_continuous(minvalue = 0, maxvalue = 1),
         Guide.title("n = $n"))
-        # Guide.title("Self-organizing map, $(div(length(m.nodes),2)) clusters\nEuclidean distance (2 neighbors)\n$n data points, uniformly distributed"))
 end
+
 
 function plotMap(m :: Map{Manhattan}, n = 10000, input = [])
     nodes = reshape(m.nodes, (2, m.dimension[1], m.dimension[2]))
@@ -115,8 +105,9 @@ function plotMap(m :: Map{Manhattan}, n = 10000, input = [])
     return plot(stack...,
         Theme(background_color = colorant"white"),
         Coord.cartesian(fixed = true),
+        Scale.x_continuous(minvalue = 0, maxvalue = 1),
+        Scale.y_continuous(minvalue = 0, maxvalue = 1),
         Guide.title("n = $n"))
-        # Guide.title("Self-organizing map, $(div(length(m.nodes),2)) clusters\nManhattan distance (4 neighbors)\n$n data points, uniformly distributed"))
 end
 
 function plotMap(m :: Map{Chebyshev}, n = 10000, input = [])
@@ -132,8 +123,9 @@ function plotMap(m :: Map{Chebyshev}, n = 10000, input = [])
     return plot(stack...,
         Theme(background_color = colorant"white"),
         Coord.cartesian(fixed = true),
+        Scale.x_continuous(minvalue = 0, maxvalue = 1),
+        Scale.y_continuous(minvalue = 0, maxvalue = 1),
         Guide.title("n = $n"))
-        # Guide.title("Self-organizing map, $(div(length(m.nodes),2)) clusters\nChebyshev distance (8 neighbors)\n$n data points, uniformly distributed"))
 end
 
 ################################################################################
@@ -178,37 +170,33 @@ end
 ##  Update the Map
 ################################################################################
 
-# exponential decay
-sigma = (t) -> exp(-t)
-
 radius(m::Map{Linear}) = div(m.dimension[1], 2)
 radius(m::Map{Manhattan}) = div(max(m.dimension[1], m.dimension[2]), 2)
 radius(m::Map{Chebyshev}) = div(max(m.dimension[1], m.dimension[2]), 2)
 
-function update(m, vector, time, R = 3000, G = 1000)
+function update(m, vector, time, totalTime, R, G)
     nodes = m.nodes
     bmu = findBMU(m, vector)
     # decreasing influence radius
-    influenceRadius = radius(m) * sigma(time/R)
+    influenceRadius = radius(m) * exp(-time/R)
 
     if influenceRadius >= 1
         for i in eachindex(nodes[1,:])
             dist = metric(m, bmu, i)
             if dist <= influenceRadius
-                gain = sigma(time/G) * sigma(dist/G)
+                gain = exp(-time/G) * exp(-dist/G)
                 nodes[:,i] = nodes[:,i] + gain * (vector - nodes[:,i])
-                # println("$time\traduis: $influenceRadius\tgain: $gain")
             end
         end
     else    # adjust BMU only
-        # println("$time\tsigma: $(sigma(time/G))")
-        nodes[:,bmu] = nodes[:,bmu] + sigma(time/G) * (vector - nodes[:,bmu])
+        # rate = L * exp(-time/totalTime)
+        nodes[:,bmu] = nodes[:,bmu] + exp(-time/G) * (vector - nodes[:,bmu])
     end
 end
 
 function trainAndPlot(timestamp, input, m, R, G)
     stack = []
-
+    total = div(length(input), 2)
     # at 0
     push!(stack, plotMap(m, 0, input))
 
@@ -216,7 +204,7 @@ function trainAndPlot(timestamp, input, m, R, G)
     for t in timestamp
         iterations = t - current
         for i in 1:iterations
-            update(m, input[:,i + current], i, R, G)
+            update(m, input[:,i + current], i + current, total, R, G)
         end
         push!(stack, plotMap(m, t))
         current = t
@@ -225,16 +213,150 @@ function trainAndPlot(timestamp, input, m, R, G)
 end
 
 
-l = Map{Linear}(rand(2, 10 * 10), (100,))
-lStack = trainAndPlot([25, 100, 500, 1000, 5000], rand(2, 10000), l, 100, 10000)
-draw(PNG("linear.png", 1800px, 1200px), vstack(hstack(lStack[1:3]...), hstack(lStack[4:6]...)))
+l = Map{Linear}(rand(2, 100), (100,))
+lStack = trainAndPlot([25, 100, 500, 1000, 5000], rand(2, 5000), l, 100, 5000)
+draw(PNG("linear.png", 1200px, 1800px), vstack(hstack(lStack[1:2]...), hstack(lStack[3:4]...), hstack(lStack[5:6]...)))
 
 m = Map{Manhattan}(rand(2, 10 * 10), (10, 10))
-mStack = trainAndPlot([25, 100, 500, 1000, 5000], rand(2, 10000), m, 3000, 1000)
-draw(PNG("manhattan.png", 1800px, 1200px), vstack(hstack(mStack[1:3]...), hstack(mStack[4:6]...)))
+mStack = trainAndPlot([25, 100, 500, 1000, 5000], rand(2, 5000), m, 3000, 1000)
+draw(PNG("manhattan.png", 1200px, 1800px), vstack(hstack(mStack[1:2]...), hstack(mStack[3:4]...), hstack(mStack[5:6]...)))
 
 c = Map{Chebyshev}(rand(2, 10 * 10), (10, 10))
-cStack = trainAndPlot([25, 100, 500, 1000, 5000], rand(2, 10000), c, 3000, 1000)
-draw(PNG("chebyshev.png", 1800px, 1200px), vstack(hstack(cStack[1:3]...), hstack(cStack[4:6]...)))
+cStack = trainAndPlot([25, 100, 500, 1000, 5000], rand(2, 5000), c, 3000, 1000)
+draw(PNG("chebyshev.png", 1200px, 1800px), vstack(hstack(cStack[1:2]...), hstack(cStack[3:4]...), hstack(cStack[5:6]...)))
+
+
+################################################################################
+##  Plotting Cities
+################################################################################
+
+function ringMetric(tour, i, j)
+    tourLength = div(length(tour), 3)
+    return min((i - j + tourLength)%tourLength, (j - i + tourLength)%tourLength)
+end
+
+function plotTour(cities, tour)
+    path = layer(x = tour[1,:], y = tour[2,:], Geom.path,
+        Theme(default_color = colorant"lightgrey", line_width = 2px))
+    bridge = layer(x = [tour[1,1], tour[1, end]],
+        y = [tour[2,1], tour[2, end]], Geom.path,
+        Theme(default_color = colorant"lightgrey", line_width = 2px))
+    vertices = layer(x = tour[1,:], y = tour[2,:], Geom.point,
+            Theme(default_point_size = 3px))
+    cities = layer(x = cities[1,:], y = cities[2,:], Geom.point,
+            Theme(default_color = colorant"coral", default_point_size = 5px))
+    return plot([vertices; cities; path; bridge],
+        Theme(background_color = colorant"white"),
+        Coord.cartesian(fixed = true),
+        Scale.x_continuous(minvalue = 0, maxvalue = 1),
+        Scale.y_continuous(minvalue = 0, maxvalue = 1),
+        Guide.title("TSP"))
+end
+
+function findBMV(tour, city)
+    leastDist = distanceSq(tour[1:2,1], city)
+    leastNode = 1
+    for i in eachindex(tour[1,:])
+        dist = distanceSq(tour[1:2,i], city)
+        if dist < leastDist
+            leastDist = dist
+            leastNode = i
+        end
+    end
+    return leastNode
+end
+
+function insertVertex(tour, i, newVertex)
+    tourLength = div(length(tour), 3)
+    firstHalf = tour[:,1:i]
+    secondHalf = tour[:,i+1:tourLength]
+    return [firstHalf newVertex secondHalf]
+end
+
+# 1 iteration
+function updateTour(cities, tour, iteration, G, R)
+    for c in eachindex(cities[1,:])
+        city = cities[:,c]
+        bmv = findBMV(tour, city)
+
+        if tour[3,bmv] != iteration     # not visited
+            # update the vertex and it's neighbors
+            for i in eachindex(tour[1,:])
+                dist = ringMetric(tour, bmv, i)
+                gain = 0.707106781 * exp(-(dist^2)/G^2)
+                tour[1:2,i] = tour[1:2,i] + gain * (city - tour[1:2,i])
+            end
+
+            # mark the best matching vertex visited
+            tour[3,bmv] = iteration
+        else
+            # copy the best matching vertex, in case we need to insert it into the
+            # tour as a new vertex
+            newVertex = [tour[1:2,bmv]; iteration - 1]
+
+            # update the vertex and it's neighbors
+            for i in eachindex(tour[1,:])
+                dist = ringMetric(tour, bmv, i)
+                gain = 0.707106781 * exp(-(dist^2)/G^2)
+                tour[1:2,i] = tour[1:2,i] + gain * (city - tour[1:2,i])
+            end
+
+            # mark the best matching vertex visited
+            tour[3,bmv] = iteration
+
+            tour = insertVertex(tour, bmv, newVertex)
+        end
+    end
+
+    # delete old nodes
+    suvivorIndices = []
+    for v in eachindex(tour[1,:])
+        if iteration - tour[3,v] < 3
+            push!(suvivorIndices, v)
+        end
+    end
+    tour = tour[:,suvivorIndices]
+    return tour
+end
+
+function tourLength(tour)
+    l = sqrt(distanceSq(tour[1:2,end], tour[1:2,1]))
+    for v in eachindex(tour[1,1:end-1])
+        l = l + sqrt(distanceSq(tour[1:2,v], tour[1:2,v+1]))
+    end
+    return l
+end
+
+function trainAndPlotHistogram(rate, iteration)
+    cities = rand(2, 30)
+    tour = [0.0, 0.0, 0]
+    lengths = []
+    # begin with 1 node at (0, 0), visited 0 times
+    for i in 1:iteration
+        if i % 100 == 0
+            @show i
+        end
+        tour = [0.0, 0.0, 0]
+        permCities = cities[:,randcycle(30)]
+        G = 1
+        R = 1/rate
+        for j in 1:(rate + 5)
+            tour = updateTour(permCities, tour, j, G, R)
+            G = (1 - R) * G
+        end
+        push!(lengths,tourLength(tour))
+    end
+
+    minL = round(minimum(lengths), 3)
+    maxL = round(maximum(lengths), 3)
+    meanL = round(mean(lengths), 3)
+    histo = plot(x=map((x) -> floor(x * 5)/5 , lengths), Geom.histogram,
+        Theme(background_color = colorant"white"),
+        Guide.title("$iteration tries, α = $(1/rate)\naverage: $meanL, lower bould: $minL, upper bould: $maxL"))
+    draw(PNG("tour-$rate.png", 600px, 600px), plotTour(cities, tour))
+    draw(PNG("histo-$rate.png", 600px, 300px), histo)
+end
+
+trainAndPlotHistogram(1000, 1000)
 
 end
